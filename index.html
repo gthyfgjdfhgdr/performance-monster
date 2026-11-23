@@ -48,7 +48,7 @@ body.low-motion *,body.low-motion *:before,body.low-motion *:after{animation:non
  <div class="topbar"><div><div class="eyebrow">SYSTEM PERFORMANCE / LIVE</div><h1 id="pageTitle">Dashboard</h1></div><div class="top-actions"><button class="btn" id="refreshBtn">↻ Refresh</button><button class="btn primary" id="gameTop">⚡ Gaming mode: OFF</button></div></div>
 
  <section class="page active" id="dashboard">
-  <div class="hero"><div><div class="eyebrow">MONSTER CONTROL</div><h2>Your performance command centre</h2><p id="heroText">Monitoring this app and the information your browser makes available.</p></div><button class="btn primary" id="quickGame">Enable gaming mode</button></div>
+  <div class="hero"><div><div class="eyebrow">MONSTER CONTROL</div><h2>Your performance command centre</h2><p id="heroText">Using built-in browser APIs to show the hardware and performance details available to this app.</p></div><button class="btn primary" id="quickGame">Enable gaming mode</button></div>
   <div class="grid">
    <div class="card"><div class="metric-head"><span>CPU LOAD</span><span class="metric-icon">🧠</span></div><div class="metric-value" id="cpuValue">—</div><div class="metric-sub" id="cpuSub">Checking browser-accessible CPU information…</div><div class="bar"><i id="cpuBar"></i></div></div>
    <div class="card"><div class="metric-head"><span>MEMORY USED</span><span class="metric-icon">▤</span></div><div class="metric-value" id="ramValue">—</div><div class="metric-sub" id="ramSub">System data unavailable</div><div class="bar"><i id="ramBar"></i></div></div>
@@ -79,7 +79,7 @@ body.low-motion *,body.low-motion *:before,body.low-motion *:after{animation:non
    <div class="info-row"><span>Screen resolution</span><strong id="resolution">—</strong></div>
    <div class="info-row"><span>Online status</span><strong id="online">—</strong></div>
   </div>
-  <div class="notice">ChromeOS does not provide ordinary web apps with live CPU or GPU utilisation percentages. This app reports only hardware details that Chrome actually exposes; it will not invent load percentages.</div>
+  <div class="notice">In-app browser APIs can report logical CPU core count, an approximate device-memory amount, app-only JavaScript memory and graphics renderer details. Ordinary web apps cannot read system-wide CPU load, CPU model name, temperature or GPU utilisation.</div>
  </section>
 
  <section class="page" id="tools">
@@ -123,13 +123,37 @@ async function readMetrics(){
   setMetric('gpuValue','gpuBar',data.gpuLoad==null?'—':data.gpuLoad.toFixed(0)+'%');$('gpuSub').textContent=data.gpuName||'GPU load not available';
   $('platform').textContent=data.platform||'—';$('os').textContent=(data.distro||data.release||data.platform||'—');$('processor').textContent=data.cpuName||'—';$('totalMemory').textContent=data.memTotalGB?data.memTotalGB.toFixed(1)+' GB':'—';$('source').textContent='Windows system monitoring';$('monitorMode').textContent='Desktop system mode';
  }else{
-  const mem=performance.memory;const used=mem?mem.usedJSHeapSize/1048576:null,limit=mem?mem.jsHeapSizeLimit/1048576:null;
+  // Standard browser APIs available to an ordinary installed web app.
+  const mem=performance.memory;
+  const used=mem?mem.usedJSHeapSize/1048576:null;
+  const limit=mem?mem.jsHeapSizeLimit/1048576:null;
   const cores=navigator.hardwareConcurrency||null;
+  const deviceRam=navigator.deviceMemory||null;
   const graphics=getGraphicsInfo();
-  setMetric('cpuValue','cpuBar','N/A');$('cpuSub').textContent=cores ? cores+' logical cores detected; live CPU load blocked by ChromeOS' : 'Live CPU load is not exposed by ChromeOS';
-  setMetric('ramValue','ramBar',used!=null?Math.min(100,used/limit*100).toFixed(0)+'%':'N/A');$('ramSub').textContent=used!=null?used.toFixed(1)+' MB JavaScript memory (this app only)':'Detailed memory unavailable';
-  setMetric('gpuValue','gpuBar','N/A');$('gpuSub').textContent='Graphics: '+graphics+'; utilisation hidden';
-  $('platform').textContent=navigator.platform||'Browser platform';$('os').textContent=navigator.userAgentData?.platform||navigator.platform||'Unknown';$('processor').textContent='Live usage hidden by ChromeOS';$('cpuCores').textContent=getCpuCores();$('gpuInfo').textContent=graphics;$('totalMemory').textContent=navigator.deviceMemory ? 'Approx. '+navigator.deviceMemory+' GB device memory reported' : 'Not exposed by browser';$('source').textContent='ChromeOS browser diagnostics';$('monitorMode').textContent='Browser-safe diagnostics';
+
+  // Browsers do not expose system-wide CPU utilisation to normal web pages.
+  // Keep the reading honest rather than inventing a percentage.
+  setMetric('cpuValue','cpuBar','N/A');
+  $('cpuSub').textContent=cores
+    ? cores+' logical CPU cores detected · live system load not available to web apps'
+    : 'CPU core details are not exposed by this browser';
+
+  setMetric('ramValue','ramBar',used!=null&&limit?Math.min(100,used/limit*100).toFixed(0)+'%':'N/A');
+  $('ramSub').textContent=used!=null
+    ? used.toFixed(1)+' MB used by this app (not total system RAM)'
+    : 'App memory details are not exposed by this browser';
+
+  setMetric('gpuValue','gpuBar','N/A');
+  $('gpuSub').textContent='Renderer: '+graphics+' · GPU usage API unavailable';
+
+  $('platform').textContent=navigator.platform||'Browser platform';
+  $('os').textContent=navigator.userAgentData?.platform||navigator.platform||'Unknown';
+  $('processor').textContent='CPU model name is not exposed to ordinary web apps';
+  $('cpuCores').textContent=cores ? cores+' logical cores (navigator.hardwareConcurrency)' : 'Not exposed';
+  $('gpuInfo').textContent=graphics;
+  $('totalMemory').textContent=deviceRam ? 'Approx. '+deviceRam+' GB device RAM (browser estimate)' : 'Not exposed';
+  $('source').textContent='Built-in browser APIs';
+  $('monitorMode').textContent='In-app browser API mode';
  }
  $('fpsValue').textContent=fps;$('fpsTool').textContent=fps;$('fpsBar').style.width=Math.min(100,fps/60*100)+'%';
  $('runtime').textContent=window.monsterAPI?'Performance Monster desktop':'Chrome / compatible browser';$('resolution').textContent=screen.width+' × '+screen.height;$('online').textContent=navigator.onLine?'Online':'Offline';
@@ -139,7 +163,7 @@ async function readMetrics(){
 function schedule(){clearTimeout(refreshTimer);refreshTimer=setTimeout(async()=>{await readMetrics();schedule()},refreshMs)}
 function setLow(v){lowMotion=v;document.body.classList.toggle('low-motion',v);$('lowSwitch').classList.toggle('on',v);$('quickLow').classList.toggle('enabled',v)}
 function setTheme(v){dark=v;document.body.style.setProperty('--bg',v?'#08111f':'#edf3f9');document.body.style.setProperty('--panel',v?'#111e30':'#ffffff');document.body.style.setProperty('--panel2',v?'#17283d':'#e4edf5');document.body.style.setProperty('--text',v?'#edf6ff':'#142338');document.body.style.setProperty('--muted',v?'#91a6bd':'#5e7186');document.body.style.setProperty('--border',v?'#263c55':'#c9d7e4');$('themeSwitch').classList.toggle('on',v)}
-function setGame(v){gameMode=v;setLow(v);$('gameTop').textContent='⚡ Gaming mode: '+(v?'ON':'OFF');$('quickGame').textContent=v?'Disable gaming mode':'Enable gaming mode';$('heroText').textContent=v?'Low-motion mode is active for this dashboard.':'Monitoring this app and the information your browser makes available.'}
+function setGame(v){gameMode=v;setLow(v);$('gameTop').textContent='⚡ Gaming mode: '+(v?'ON':'OFF');$('quickGame').textContent=v?'Disable gaming mode':'Enable gaming mode';$('heroText').textContent=v?'Low-motion mode is active for this dashboard.':'Using built-in browser APIs to show the hardware and performance details available to this app.'}
 document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=b.textContent.trim()}));
 $('quickGame').onclick=$('gameTop').onclick=()=>setGame(!gameMode);
 $('quickLow').onclick=$('lowToggle').onclick=()=>setLow(!lowMotion);
@@ -149,7 +173,7 @@ $('accentSelect').onchange=e=>document.documentElement.style.setProperty('--acce
 $('refreshRate').onchange=e=>{refreshMs=Number(e.target.value);schedule()};
 $('refreshBtn').onclick=$('quickRefresh').onclick=$('refreshTool').onclick=async()=>{await readMetrics();$('connection').textContent='UPDATED JUST NOW'};
 $('detectBtn').onclick=()=>{alert(window.monsterAPI?'Desktop monitoring module detected.':'ChromeOS browser diagnostics detected. CPU/GPU utilisation percentages are not exposed. Available details: '+getCpuCores()+'. Graphics: '+getGraphicsInfo())};
-function about(){alert('Performance Monster is a monitoring dashboard. Browser mode can measure this page’s animation rate and limited JavaScript memory. Windows desktop mode can read CPU and system memory. GPU utilisation depends on hardware and driver support. It does not overclock, boost hardware, or change other apps.')}$('aboutBtn').onclick=$('quickAbout').onclick=about;
+function about(){alert('Performance Monster is a monitoring dashboard. Browser mode uses built-in web APIs for CPU core count, approximate device memory, app-only JavaScript memory, graphics renderer details and this page’s frame rate. It cannot access system-wide CPU/GPU load or hardware temperature. Windows desktop mode can read more system information. GPU utilisation depends on hardware and driver support. It does not overclock, boost hardware, or change other apps.')}$('aboutBtn').onclick=$('quickAbout').onclick=about;
 function fpsLoop(t){frames++;if(t-lastFrame>=1000){fps=Math.round(frames*1000/(t-lastFrame));frames=0;lastFrame=t}requestAnimationFrame(fpsLoop)}requestAnimationFrame(fpsLoop);
 window.addEventListener('resize',drawChart);window.addEventListener('online',()=>{$('connection').textContent='ONLINE'});window.addEventListener('offline',()=>{$('connection').textContent='OFFLINE'});
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
