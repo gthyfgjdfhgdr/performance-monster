@@ -6,7 +6,6 @@
 <meta name="theme-color" content="#08111f">
 <title>Performance Monster</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <style>
 :root{--bg:#08111f;--panel:#111e30;--panel2:#17283d;--text:#edf6ff;--muted:#91a6bd;--accent:#42f5a1;--accent2:#31c8ff;--border:#263c55;--danger:#ff6b78}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 75% 0%,#14334a 0,transparent 35%),var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Arial,sans-serif}
@@ -51,9 +50,9 @@ body.low-motion *,body.low-motion *:before,body.low-motion *:after{animation:non
  <section class="page active" id="dashboard">
   <div class="hero"><div><div class="eyebrow">MONSTER CONTROL</div><h2>Your performance command centre</h2><p id="heroText">Monitoring this app and the information your browser makes available.</p></div><button class="btn primary" id="quickGame">Enable gaming mode</button></div>
   <div class="grid">
-   <div class="card"><div class="metric-head"><span>CPU LOAD</span><span class="metric-icon">🧠</span></div><div class="metric-value" id="cpuValue">—</div><div class="metric-sub" id="cpuSub">System data unavailable</div><div class="bar"><i id="cpuBar"></i></div></div>
+   <div class="card"><div class="metric-head"><span>CPU LOAD</span><span class="metric-icon">🧠</span></div><div class="metric-value" id="cpuValue">—</div><div class="metric-sub" id="cpuSub">Checking browser-accessible CPU information…</div><div class="bar"><i id="cpuBar"></i></div></div>
    <div class="card"><div class="metric-head"><span>MEMORY USED</span><span class="metric-icon">▤</span></div><div class="metric-value" id="ramValue">—</div><div class="metric-sub" id="ramSub">System data unavailable</div><div class="bar"><i id="ramBar"></i></div></div>
-   <div class="card"><div class="metric-head"><span>GPU LOAD</span><span class="metric-icon">▧</span></div><div class="metric-value" id="gpuValue">—</div><div class="metric-sub" id="gpuSub">Not exposed by browser</div><div class="bar"><i id="gpuBar"></i></div></div>
+   <div class="card"><div class="metric-head"><span>GPU LOAD</span><span class="metric-icon">▧</span></div><div class="metric-value" id="gpuValue">—</div><div class="metric-sub" id="gpuSub">Checking browser-accessible graphics information…</div><div class="bar"><i id="gpuBar"></i></div></div>
    <div class="card"><div class="metric-head"><span>APP FPS</span><span class="metric-icon">⚡</span></div><div class="metric-value" id="fpsValue">—</div><div class="metric-sub">Frames per second in this dashboard</div><div class="bar"><i id="fpsBar"></i></div></div>
   </div>
   <div class="lower">
@@ -72,13 +71,15 @@ body.low-motion *,body.low-motion *:before,body.low-motion *:after{animation:non
   <div class="card info-list">
    <div class="info-row"><span>Platform</span><strong id="platform">—</strong></div>
    <div class="info-row"><span>Operating system</span><strong id="os">—</strong></div>
-   <div class="info-row"><span>Processor</span><strong id="processor">—</strong></div>
+   <div class="info-row"><span>Processor information</span><strong id="processor">—</strong></div>
+   <div class="info-row"><span>Logical CPU cores (if exposed)</span><strong id="cpuCores">—</strong></div>
+   <div class="info-row"><span>Graphics renderer (if exposed)</span><strong id="gpuInfo">—</strong></div>
    <div class="info-row"><span>Total memory</span><strong id="totalMemory">—</strong></div>
    <div class="info-row"><span>Browser / runtime</span><strong id="runtime">—</strong></div>
    <div class="info-row"><span>Screen resolution</span><strong id="resolution">—</strong></div>
    <div class="info-row"><span>Online status</span><strong id="online">—</strong></div>
   </div>
-  <div class="notice">In Chrome or on a Chromebook, the browser intentionally hides detailed CPU/GPU readings. The Windows desktop version can show more system information through its local monitoring module.</div>
+  <div class="notice">ChromeOS does not provide ordinary web apps with live CPU or GPU utilisation percentages. This app reports only hardware details that Chrome actually exposes; it will not invent load percentages.</div>
  </section>
 
  <section class="page" id="tools">
@@ -109,6 +110,8 @@ const $=id=>document.getElementById(id);
 let lowMotion=false,dark=true,gameMode=false,refreshTimer=null,refreshMs=2000;
 const historyData=[];
 let fps=0,frames=0,lastFrame=performance.now();
+function getGraphicsInfo(){try{const c=document.createElement('canvas');const gl=c.getContext('webgl')||c.getContext('experimental-webgl');if(!gl)return 'WebGL unavailable';const ext=gl.getExtension('WEBGL_debug_renderer_info');if(!ext)return 'Renderer details hidden by browser';return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)||'Renderer details unavailable'}catch(e){return 'Graphics details unavailable'}}
+function getCpuCores(){return navigator.hardwareConcurrency ? navigator.hardwareConcurrency+' logical cores reported' : 'Not exposed by browser'}
 function setMetric(id,bar,value,sub){$(id).textContent=value;$(bar).style.width=(Number.isFinite(parseFloat(value))?Math.max(0,Math.min(100,parseFloat(value))):0)+'%';}
 function drawChart(){const c=$('chart'),ctx=c.getContext('2d'),r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1;c.width=Math.max(1,r.width*dpr);c.height=Math.max(1,r.height*dpr);ctx.scale(dpr,dpr);const w=r.width,h=r.height;ctx.clearRect(0,0,w,h);ctx.strokeStyle='#294057';ctx.lineWidth=1;for(let i=1;i<5;i++){ctx.beginPath();ctx.moveTo(0,h*i/5);ctx.lineTo(w,h*i/5);ctx.stroke()}function line(key,color){const vals=historyData.map(x=>x[key]);if(vals.length<2)return;ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();vals.forEach((v,i)=>{const x=i/(Math.max(1,vals.length-1))*w,y=h-(v/100)*(h-10)-5;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()}line('cpu','#42f5a1');line('ram','#31c8ff')}
 async function readMetrics(){
@@ -121,10 +124,12 @@ async function readMetrics(){
   $('platform').textContent=data.platform||'—';$('os').textContent=(data.distro||data.release||data.platform||'—');$('processor').textContent=data.cpuName||'—';$('totalMemory').textContent=data.memTotalGB?data.memTotalGB.toFixed(1)+' GB':'—';$('source').textContent='Windows system monitoring';$('monitorMode').textContent='Desktop system mode';
  }else{
   const mem=performance.memory;const used=mem?mem.usedJSHeapSize/1048576:null,limit=mem?mem.jsHeapSizeLimit/1048576:null;
-  setMetric('cpuValue','cpuBar','N/A');$('cpuSub').textContent='Blocked by browser security';
-  setMetric('ramValue','ramBar',used!=null?Math.min(100,used/limit*100).toFixed(0)+'%':'N/A');$('ramSub').textContent=used!=null?used.toFixed(1)+' MB JavaScript memory':'Detailed memory unavailable';
-  setMetric('gpuValue','gpuBar','N/A');$('gpuSub').textContent='Not exposed by browser';
-  $('platform').textContent=navigator.platform||'Browser platform';$('os').textContent=navigator.userAgentData?.platform||navigator.platform||'Unknown';$('processor').textContent='Hidden by browser';$('totalMemory').textContent='Hidden by browser';$('source').textContent='Browser monitoring';$('monitorMode').textContent='Browser-safe mode';
+  const cores=navigator.hardwareConcurrency||null;
+  const graphics=getGraphicsInfo();
+  setMetric('cpuValue','cpuBar','N/A');$('cpuSub').textContent=cores ? cores+' logical cores detected; live CPU load blocked by ChromeOS' : 'Live CPU load is not exposed by ChromeOS';
+  setMetric('ramValue','ramBar',used!=null?Math.min(100,used/limit*100).toFixed(0)+'%':'N/A');$('ramSub').textContent=used!=null?used.toFixed(1)+' MB JavaScript memory (this app only)':'Detailed memory unavailable';
+  setMetric('gpuValue','gpuBar','N/A');$('gpuSub').textContent='Graphics: '+graphics+'; utilisation hidden';
+  $('platform').textContent=navigator.platform||'Browser platform';$('os').textContent=navigator.userAgentData?.platform||navigator.platform||'Unknown';$('processor').textContent='Live usage hidden by ChromeOS';$('cpuCores').textContent=getCpuCores();$('gpuInfo').textContent=graphics;$('totalMemory').textContent=navigator.deviceMemory ? 'Approx. '+navigator.deviceMemory+' GB device memory reported' : 'Not exposed by browser';$('source').textContent='ChromeOS browser diagnostics';$('monitorMode').textContent='Browser-safe diagnostics';
  }
  $('fpsValue').textContent=fps;$('fpsTool').textContent=fps;$('fpsBar').style.width=Math.min(100,fps/60*100)+'%';
  $('runtime').textContent=window.monsterAPI?'Performance Monster desktop':'Chrome / compatible browser';$('resolution').textContent=screen.width+' × '+screen.height;$('online').textContent=navigator.onLine?'Online':'Offline';
@@ -143,7 +148,7 @@ $('quickTheme').onclick=()=>setTheme(!dark);$('themeSwitch').onclick=()=>setThem
 $('accentSelect').onchange=e=>document.documentElement.style.setProperty('--accent',e.target.value);
 $('refreshRate').onchange=e=>{refreshMs=Number(e.target.value);schedule()};
 $('refreshBtn').onclick=$('quickRefresh').onclick=$('refreshTool').onclick=async()=>{await readMetrics();$('connection').textContent='UPDATED JUST NOW'};
-$('detectBtn').onclick=()=>{alert(window.monsterAPI?'Desktop monitoring module detected.':'Browser mode: CPU/GPU system metrics are restricted. Install the Windows desktop build for more metrics.')};
+$('detectBtn').onclick=()=>{alert(window.monsterAPI?'Desktop monitoring module detected.':'ChromeOS browser diagnostics detected. CPU/GPU utilisation percentages are not exposed. Available details: '+getCpuCores()+'. Graphics: '+getGraphicsInfo())};
 function about(){alert('Performance Monster is a monitoring dashboard. Browser mode can measure this page’s animation rate and limited JavaScript memory. Windows desktop mode can read CPU and system memory. GPU utilisation depends on hardware and driver support. It does not overclock, boost hardware, or change other apps.')}$('aboutBtn').onclick=$('quickAbout').onclick=about;
 function fpsLoop(t){frames++;if(t-lastFrame>=1000){fps=Math.round(frames*1000/(t-lastFrame));frames=0;lastFrame=t}requestAnimationFrame(fpsLoop)}requestAnimationFrame(fpsLoop);
 window.addEventListener('resize',drawChart);window.addEventListener('online',()=>{$('connection').textContent='ONLINE'});window.addEventListener('offline',()=>{$('connection').textContent='OFFLINE'});
